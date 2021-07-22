@@ -1,264 +1,395 @@
 # 图像增广
+:label:`sec_image_augmentation`
 
-在[“深度卷积神经网络：AlexNet”](../chapter_convolutional-neural-networks/alexnet.md)小节里我们提到过，大规模数据集是成功使用深度网络的前提。图像增广（image augmentation）技术通过对训练图像做一系列随机变化，来产生相似但又有不同的训练样本，从而扩大训练数据集规模。图像增广的另一种解释是，通过对训练样本做一些随机变形，可以降低模型对某些属性的依赖，从而提高泛化能力。例如我们可以对图像进行不同的裁剪，使得感兴趣的物体出现在不同的位置中，从而使得模型减小对物体出现位置的依赖性。也可以调整亮度色彩等因素来降低模型对色彩的敏感度。在AlexNet的成功中，图像增广技术功不可没。本小节我们将讨论这个在计算机视觉里被广泛使用的技术。
+在 :numref:`sec_alexnet` 中，我们提到过大型数据集是成功应用深度神经网络的先决条件。
+图像增广在对训练图像进行一系列的随机变化之后，生成相似但不同的训练样本，从而扩大了训练集的规模。
+此外，应用图像增广的原因是，随机改变训练样本可以减少模型对某些属性的依赖，从而提高模型的泛化能力。
+例如，我们可以以不同的方式裁剪图像，使感兴趣的对象出现在不同的位置，减少模型对于对象出现位置的依赖。
+我们还可以调整亮度、颜色等因素来降低模型对颜色的敏感度。
+可以说，图像增广技术对于AlexNet的成功是必不可少的。在本节中，我们将讨论这项广泛应用于计算机视觉的技术。
 
-首先，导入本节实验所需的包或模块。
 
-```{.python .input  n=21}
-import sys
-sys.path.insert(0, '..')
-
+```{.python .input}
 %matplotlib inline
-import gluonbook as gb
-import mxnet as mx
-from mxnet import autograd, gluon, image, init, nd 
-from mxnet.gluon import data as gdata, loss as gloss, utils as gutils
-import sys
-from time import time
+from d2l import mxnet as d2l
+from mxnet import autograd, gluon, image, init, np, npx
+from mxnet.gluon import nn
+
+npx.set_np()
 ```
 
-## 常用增广方法
+```{.python .input}
+#@tab pytorch
+%matplotlib inline
+from d2l import torch as d2l
+import torch
+import torchvision
+from torch import nn
+```
 
-我们先读取一张$400\times 500$的图像作为样例。
+## 常用的图像增广方法
 
-```{.python .input  n=22}
-gb.set_figsize()
+我们对常用图像增广方法的探索中，我们将使用下面这个尺寸为 $400\times 500$ 的图像作为示例。
+
+```{.python .input}
+d2l.set_figsize()
 img = image.imread('../img/cat1.jpg')
-gb.plt.imshow(img.asnumpy())
+d2l.plt.imshow(img.asnumpy());
 ```
 
-下面定义绘图函数`show_images`。
-
-```{.python .input  n=23}
-# 本函数已保存在 gluonbook 包中方便以后使用。
-def show_images(imgs, num_rows, num_cols, scale=2):                                                                              
-    """Plot a list of images."""
-    figsize = (num_cols * scale, num_rows * scale)
-    _, axes = gb.plt.subplots(num_rows, num_cols, figsize=figsize)
-    for i in range(num_rows):
-        for j in range(num_cols):
-            axes[i][j].imshow(imgs[i * num_cols + j].asnumpy())
-            axes[i][j].axes.get_xaxis().set_visible(False)
-            axes[i][j].axes.get_yaxis().set_visible(False)
-    return axes
+```{.python .input}
+#@tab pytorch
+d2l.set_figsize()
+img = d2l.Image.open('../img/cat1.jpg')
+d2l.plt.imshow(img);
 ```
 
-因为大部分的增广方法都有一定的随机性。接下来我们定义一个辅助函数，它对输入图像`img`运行多次增广方法`aug`并显示所有结果。
+大多数图像增广方法都具有一定的随机性。为了便于观察图像增广的效果，我们下面定义辅助函数 `apply` 。
+此函数在输入图像 `img` 上多次运行图像增广方法 `aug` 并显示所有结果。
 
-```{.python .input  n=24}
+```{.python .input}
+#@tab all
 def apply(img, aug, num_rows=2, num_cols=4, scale=1.5):
     Y = [aug(img) for _ in range(num_rows * num_cols)]
-    show_images(Y, num_rows, num_cols, scale)
+    d2l.show_images(Y, num_rows, num_cols, scale=scale)
 ```
 
-### 变形
+### 翻转和裁剪
 
-左右翻转图像通常不改变物体的类别，它是最早也是最广泛使用的一种增广。下面我们使用transform模块里的`RandomFlipLeftRight`类来实现按0.5的概率左右翻转图像：
+[**左右翻转图像**]通常不会改变对象的类别。这是最早和最广泛使用的图像增广方法之一。
+接下来，我们使用 `transforms` 模块来创建 `RandomFlipLeftRight` 实例，这样就各有50%的几率使图像向左或向右翻转。
 
-```{.python .input  n=25}
-apply(img, gdata.vision.transforms.RandomFlipLeftRight())
+```{.python .input}
+apply(img, gluon.data.vision.transforms.RandomFlipLeftRight())
 ```
 
-上下翻转不如水平翻转通用，但是至少对于样例图像，上下翻转不会造成识别障碍。
-
-```{.python .input  n=26}
-apply(img, gdata.vision.transforms.RandomFlipTopBottom())
+```{.python .input}
+#@tab pytorch
+apply(img, torchvision.transforms.RandomHorizontalFlip())
 ```
 
-我们使用的样例图像里，猫在图像正中间，但一般情况下可能不是这样。[“池化层”](../chapter_convolutional-neural-networks/pooling.md)一节里我们解释了池化层能弱化卷积层对目标位置的敏感度，另一方面我们可以通过对图像随机剪裁来让物体以不同的比例出现在不同位置。
+[**上下翻转图像**]不如左右图像翻转那样常用。但是，至少对于这个示例图像，上下翻转不会妨碍识别。接下来，我们创建一个 `RandomFlipTopBottom` 实例，使图像各有50%的几率向上或向下翻转。
 
-下面代码里我们每次随机裁剪一片面积为原面积10%到100%的区域，其宽和高的比例在0.5和2之间，然后再将高宽缩放到200像素大小。
+```{.python .input}
+apply(img, gluon.data.vision.transforms.RandomFlipTopBottom())
+```
 
-```{.python .input  n=27}
-shape_aug = gdata.vision.transforms.RandomResizedCrop(
+```{.python .input}
+#@tab pytorch
+apply(img, torchvision.transforms.RandomVerticalFlip())
+```
+
+在我们使用的示例图像中，猫位于图像的中间，但并非所有图像都是这样。
+在 :numref:`sec_pooling` 中，我们解释了汇聚层可以降低卷积层对目标位置的敏感性。
+另外，我们可以通过对图像进行随机裁剪，使物体以不同的比例出现在图像的不同位置。
+这也可以降低模型对目标位置的敏感性。
+
+在下面的代码中，我们[**随机裁剪**]一个面积为原始面积10%到100%的区域，该区域的宽高比从0.5到2之间随机取值。
+然后，区域的宽度和高度都被缩放到200像素。
+在本节中（除非另有说明），$a$和$b$之间的随机数指的是在区间$[a, b]$中通过均匀采样获得的连续值。
+
+```{.python .input}
+shape_aug = gluon.data.vision.transforms.RandomResizedCrop(
     (200, 200), scale=(0.1, 1), ratio=(0.5, 2))
 apply(img, shape_aug)
 ```
 
-### 颜色变化
-
-另一类增广方法是变化颜色。我们可以从四个维度改变图像的颜色：亮度、对比、饱和度和色相。在下面的例子里，我们将随机亮度改为原图的50%到150%。
-
-```{.python .input  n=28}
-apply(img, gdata.vision.transforms.RandomBrightness(0.5))
+```{.python .input}
+#@tab pytorch
+shape_aug = torchvision.transforms.RandomResizedCrop(
+    (200, 200), scale=(0.1, 1), ratio=(0.5, 2))
+apply(img, shape_aug)
 ```
 
-类似的，我们可以修改色相。
+### 改变颜色
 
-```{.python .input  n=29}
-apply(img, gdata.vision.transforms.RandomHue(0.5))
+另一种增广方法是改变颜色。
+我们可以改变图像颜色的四个方面：亮度、对比度、饱和度和色调。
+在下面的示例中，我们[**随机更改图像的亮度**]，随机值为原始图像的50%（$1-0.5$）到150%（$1+0.5$）之间。
+
+```{.python .input}
+apply(img, gluon.data.vision.transforms.RandomBrightness(0.5))
 ```
 
-或者用使用`RandomColorJitter`来一起使用。
+```{.python .input}
+#@tab pytorch
+apply(img, torchvision.transforms.ColorJitter(
+    brightness=0.5, contrast=0, saturation=0, hue=0))
+```
 
-```{.python .input  n=30}
-color_aug = gdata.vision.transforms.RandomColorJitter(
+同样，我们可以[**随机更改图像的色调**]。
+
+```{.python .input}
+apply(img, gluon.data.vision.transforms.RandomHue(0.5))
+```
+
+```{.python .input}
+#@tab pytorch
+apply(img, torchvision.transforms.ColorJitter(
+    brightness=0, contrast=0, saturation=0, hue=0.5))
+```
+
+我们还可以创建一个 `RandomColorJitter` 实例，并设置如何同时[**随机更改图像的亮度（`brightness`）、对比度（`contrast`）、饱和度（`saturation`）和色调（`hue`）**]。
+
+```{.python .input}
+color_aug = gluon.data.vision.transforms.RandomColorJitter(
     brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5)
 apply(img, color_aug)
 ```
 
-### 使用多个增广
+```{.python .input}
+#@tab pytorch
+color_aug = torchvision.transforms.ColorJitter(
+    brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5)
+apply(img, color_aug)
+```
 
-实际应用中我们会将多个增广叠加使用。`Compose`类可以将多个增广串联起来。
+### [**结合多种图像增广方法**]
 
-```{.python .input  n=31}
-augs = gdata.vision.transforms.Compose([
-    gdata.vision.transforms.RandomFlipLeftRight(), color_aug, shape_aug])
+在实践中，我们将结合多种图像增广方法。比如，我们可以通过使用一个 `Compose` 实例来综合上面定义的不同的图像增广方法，并将它们应用到每个图像。
+
+```{.python .input}
+augs = gluon.data.vision.transforms.Compose([
+    gluon.data.vision.transforms.RandomFlipLeftRight(), color_aug, shape_aug])
 apply(img, augs)
 ```
 
-## 使用图像增广来训练
-
-接下来我们来看一个将图像增广应用在实际训练中的例子，并比较其与不使用时的区别。这里我们使用CIFAR-10数据集，而不是之前我们一直使用的Fashion-MNIST。原因在于Fashion-MNIST中物体位置和尺寸都已经归一化了，而CIFAR-10中物体颜色和大小区别更加显著。下面我们展示CIFAR-10中的前32张训练图像。
-
-```{.python .input  n=32}
-show_images(gdata.vision.CIFAR10(train=True)[0:32][0], 4, 8, scale=0.8);
+```{.python .input}
+#@tab pytorch
+augs = torchvision.transforms.Compose([
+    torchvision.transforms.RandomHorizontalFlip(), color_aug, shape_aug])
+apply(img, augs)
 ```
 
-我们通常将图像增广用在训练样本上，但是在预测的时候并不使用随机增广。这里我们仅仅使用最简单的随机水平翻转。此外，我们使用`ToTensor`变换来将图像转成MXNet需要的格式，即格式为（批量，通道，高，宽）以及类型为32位浮点数。
+## [**使用图像增广进行训练**]
 
-```{.python .input  n=33}
-train_augs = gdata.vision.transforms.Compose([
-    gdata.vision.transforms.RandomFlipLeftRight(),
-    gdata.vision.transforms.ToTensor(),
-])
+让我们使用图像增广来训练模型。
+这里，我们使用CIFAR-10数据集，而不是我们之前使用的Fashion-MNIST数据集。
+这是因为Fashion-MNIST数据集中对象的位置和大小已被规范化，而CIFAR-10数据集中对象的颜色和大小差异更明显。
+CIFAR-10数据集中的前32个训练图像如下所示。
 
-test_augs = gdata.vision.transforms.Compose([
-    gdata.vision.transforms.ToTensor(),
-])
+```{.python .input}
+d2l.show_images(gluon.data.vision.CIFAR10(
+    train=True)[0:32][0], 4, 8, scale=0.8);
 ```
 
-接下来我们定义一个辅助函数来方便读取图像并应用增广。Gluon的数据集提供`transform_first`函数来对数据里面的第一项（数据一般有图像和标签两项）来应用增广。另外图像增广将增加计算复杂度，这里使用4个进程来加速读取（暂不支持 Windows 操作系统）。
+```{.python .input}
+#@tab pytorch
+all_images = torchvision.datasets.CIFAR10(train=True, root="../data",
+                                          download=True)
+d2l.show_images([all_images[i][0] for i in range(32)], 4, 8, scale=0.8);
+```
 
-```{.python .input  n=34}
-num_workers = 0 if sys.platform.startswith('win32') else 4
+为了在预测过程中得到确切的结果，我们通常对训练样本只进行图像增广，且在预测过程中不使用随机操作的图像增广。
+在这里，我们[**只使用最简单的随机左右翻转**]。
+此外，我们使用 `ToTensor` 实例将一批图像转换为深度学习框架所要求的格式，即形状为（批量大小，通道数，高度，宽度）的32位浮点数，取值范围为0到1。
+
+
+```{.python .input}
+train_augs = gluon.data.vision.transforms.Compose([
+    gluon.data.vision.transforms.RandomFlipLeftRight(),
+    gluon.data.vision.transforms.ToTensor()])
+
+test_augs = gluon.data.vision.transforms.Compose([
+    gluon.data.vision.transforms.ToTensor()])
+```
+
+```{.python .input}
+#@tab pytorch
+train_augs = torchvision.transforms.Compose([
+     torchvision.transforms.RandomHorizontalFlip(),
+     torchvision.transforms.ToTensor()])
+
+test_augs = torchvision.transforms.Compose([
+     torchvision.transforms.ToTensor()])
+```
+
+:begin_tab:`mxnet`
+接下来，我们定义了一个辅助函数，以便于读取图像和应用图像增广。Gluon数据集提供的 `transform_first` 函数将图像增广应用于每个训练示例的第一个元素（图像和标签），即图像顶部的元素。有关 `DataLoader` 的详细介绍，请参阅 :numref:`sec_fashion_mnist` 。
+:end_tab:
+
+:begin_tab:`pytorch`
+接下来，我们[**定义一个辅助函数，以便于读取图像和应用图像增广**]。PyTorch 数据集提供的 `transform` 函数应用图像增广来转化图像。有关 `DataLoader` 的详细介绍，请参阅 :numref:`sec_fashion_mnist` 。
+:end_tab:
+
+```{.python .input}
 def load_cifar10(is_train, augs, batch_size):
-    return gdata.DataLoader(
-        gdata.vision.CIFAR10(train=is_train).transform_first(augs),
-        batch_size=batch_size, shuffle=is_train, num_workers=num_workers)
+    return gluon.data.DataLoader(
+        gluon.data.vision.CIFAR10(train=is_train).transform_first(augs),
+        batch_size=batch_size, shuffle=is_train,
+        num_workers=d2l.get_dataloader_workers())
 ```
 
-### 使用多GPU训练模型
-
-我们在CIFAR-10数据集上训练[“残差网络：ResNet”](../chapter_convolutional-neural-networks/resnet.md)一节介绍的ResNet-18模型。我们将应用[“多GPU计算的Gluon实现”](../chapter_computational-performance/multiple-gpus-gluon.md)一节中介绍的方法，使用多GPU训练模型。
-
-首先，我们定义`try_all_gpus`函数，从而能够使用所有可用的GPU。
-
-```{.python .input  n=35}
-# 本函数已保存在 gluonbook 包中方便以后使用。
-def try_all_gpus():
-    ctxes = []
-    try:
-        for i in range(16):
-            ctx = mx.gpu(i)
-            _ = nd.array([0], ctx=ctx)
-            ctxes.append(ctx)
-    except:
-        pass
-    if not ctxes:
-        ctxes = [mx.cpu()]
-    return ctxes
+```{.python .input}
+#@tab pytorch
+def load_cifar10(is_train, augs, batch_size):
+    dataset = torchvision.datasets.CIFAR10(root="../data", train=is_train,
+                                           transform=augs, download=True)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size,
+                    shuffle=is_train, num_workers=d2l.get_dataloader_workers())
+    return dataloader
 ```
 
-然后，我们定义`evaluate_accuracy`函数评价模型的分类准确率。与[“Softmax回归的从零开始实现”](../chapter_deep-learning-basics/softmax-regression-scratch.md)和[“卷积神经网络（LeNet）”](../chapter_convolutional-neural-networks/lenet.md)两节中描述的`evaluate_accuracy`函数不同，当`ctx`包含多个GPU时，这里定义的函数通过辅助函数`_get_batch`将小批量数据样本划分并复制到各个GPU上。
+### 多GPU训练
 
-```{.python .input  n=36}
-def _get_batch(batch, ctx):
-    features, labels = batch
-    if labels.dtype != features.dtype:
-        labels = labels.astype(features.dtype)
-    # 当 ctx 包含多个GPU时，划分小批量数据样本并复制到各个 GPU 上。
-    return (gutils.split_and_load(features, ctx),
-            gutils.split_and_load(labels, ctx),
-            features.shape[0])
+我们在CIFAR-10数据集上训练 :numref:`sec_resnet` 中的ResNet-18模型。
+回想一下 :numref:`sec_multi_gpu_concise` 中对多 GPU 训练的介绍。
+接下来，我们[**定义一个函数，使用多GPU对模型进行训练和评估**]。
 
-# 本函数已保存在 gluonbook 包中方便以后使用。
-def evaluate_accuracy(data_iter, net, ctx=[mx.cpu()]):
-    if isinstance(ctx, mx.Context):
-        ctx = [ctx]
-    acc = nd.array([0])
-    n = 0
-    for batch in data_iter:
-        features, labels, _ = _get_batch(batch, ctx)
-        for X, y in zip(features, labels):
-            y = y.astype('float32')
-            acc += (net(X).argmax(axis=1) == y).sum().copyto(mx.cpu())
-            n += y.size
-        acc.wait_to_read()
-    return acc.asscalar() / n
+```{.python .input}
+#@save
+def train_batch_ch13(net, features, labels, loss, trainer, devices,
+                     split_f=d2l.split_batch):
+    X_shards, y_shards = split_f(features, labels, devices)
+    with autograd.record():
+        pred_shards = [net(X_shard) for X_shard in X_shards]
+        ls = [loss(pred_shard, y_shard) for pred_shard, y_shard
+              in zip(pred_shards, y_shards)]
+    for l in ls:
+        l.backward()
+    # True标志允许使用过时的梯度，这很有用（例如，在微调BERT中）
+    trainer.step(labels.shape[0], ignore_stale_grad=True)
+    train_loss_sum = sum([float(l.sum()) for l in ls])
+    train_acc_sum = sum(d2l.accuracy(pred_shard, y_shard)
+                        for pred_shard, y_shard in zip(pred_shards, y_shards))
+    return train_loss_sum, train_acc_sum
 ```
 
-接下来，我们定义`train`函数使用多GPU训练并评价模型。
-
-```{.python .input  n=37}
-# 本函数已保存在 gluonbook 包中方便以后使用。
-def train(train_iter, test_iter, net, loss, trainer, ctx, num_epochs):
-    print('training on', ctx)
-    if isinstance(ctx, mx.Context):
-        ctx = [ctx]
-    for epoch in range(1, num_epochs + 1):
-        train_l_sum, train_acc_sum, n, m = 0.0, 0.0, 0.0, 0.0
-        start = time()
-        for i, batch in enumerate(train_iter):
-            Xs, ys, batch_size = _get_batch(batch, ctx)
-            ls = []
-            with autograd.record():
-                y_hats = [net(X) for X in Xs]
-                ls = [loss(y_hat, y) for y_hat, y in zip(y_hats, ys)]
-            for l in ls:
-                l.backward()
-            train_acc_sum += sum([(y_hat.argmax(axis=1) == y).sum().asscalar()
-                                 for y_hat, y in zip(y_hats, ys)])
-            train_l_sum += sum([l.sum().asscalar() for l in ls])
-            trainer.step(batch_size)
-            n += batch_size
-            m += sum([y.size for y in ys])
-        test_acc = evaluate_accuracy(test_iter, net, ctx)
-        print('epoch %d, loss %.4f, train acc %.3f, test acc %.3f, '
-              'time %.1f sec'
-              % (epoch, train_l_sum / n, train_acc_sum / m, test_acc,
-                 time() - start))
+```{.python .input}
+#@tab pytorch
+#@save
+def train_batch_ch13(net, X, y, loss, trainer, devices):
+    if isinstance(X, list):
+        # 微调BERT中所需（稍后讨论）
+        X = [x.to(devices[0]) for x in X]
+    else:
+        X = X.to(devices[0])
+    y = y.to(devices[0])
+    net.train()
+    trainer.zero_grad()
+    pred = net(X)
+    l = loss(pred, y)
+    l.sum().backward()
+    trainer.step()
+    train_loss_sum = l.sum()
+    train_acc_sum = d2l.accuracy(pred, y)
+    return train_loss_sum, train_acc_sum
 ```
 
-现在，我们可以定义函数使用图像增广来训练模型了。
+```{.python .input}
+#@save
+def train_ch13(net, train_iter, test_iter, loss, trainer, num_epochs,
+               devices=d2l.try_all_gpus(), split_f=d2l.split_batch):
+    timer, num_batches = d2l.Timer(), len(train_iter)
+    animator = d2l.Animator(xlabel='epoch', xlim=[1, num_epochs], ylim=[0, 1],
+                            legend=['train loss', 'train acc', 'test acc'])
+    for epoch in range(num_epochs):
+        # 4个维度：储存训练损失，训练准确度，实例数，特点数
+        metric = d2l.Accumulator(4)
+        for i, (features, labels) in enumerate(train_iter):
+            timer.start()
+            l, acc = train_batch_ch13(
+                net, features, labels, loss, trainer, devices, split_f)
+            metric.add(l, acc, labels.shape[0], labels.size)
+            timer.stop()
+            if (i + 1) % (num_batches // 5) == 0 or i == num_batches - 1:
+                animator.add(epoch + (i + 1) / num_batches,
+                             (metric[0] / metric[2], metric[1] / metric[3],
+                              None))
+        test_acc = d2l.evaluate_accuracy_gpus(net, test_iter, split_f)
+        animator.add(epoch + 1, (None, None, test_acc))
+    print(f'loss {metric[0] / metric[2]:.3f}, train acc '
+          f'{metric[1] / metric[3]:.3f}, test acc {test_acc:.3f}')
+    print(f'{metric[2] * num_epochs / timer.sum():.1f} examples/sec on '
+          f'{str(devices)}')
+```
 
-```{.python .input  n=38}
-def train_with_data_aug(train_augs, test_augs, lr=0.001):
-    batch_size = 256
-    ctx = try_all_gpus()
-    net = gb.resnet18(10)
-    net.initialize(ctx=ctx, init=init.Xavier())
-    # 这里使用了 Adam 优化算法。
-    trainer = gluon.Trainer(net.collect_params(), 'adam',
-                            {'learning_rate': lr})
-    loss = gloss.SoftmaxCrossEntropyLoss()
+```{.python .input}
+#@tab pytorch
+#@save
+def train_ch13(net, train_iter, test_iter, loss, trainer, num_epochs,
+               devices=d2l.try_all_gpus()):
+    timer, num_batches = d2l.Timer(), len(train_iter)
+    animator = d2l.Animator(xlabel='epoch', xlim=[1, num_epochs], ylim=[0, 1],
+                            legend=['train loss', 'train acc', 'test acc'])
+    net = nn.DataParallel(net, device_ids=devices).to(devices[0])
+    for epoch in range(num_epochs):
+        # 4个维度：储存训练损失，训练准确度，实例数，特点数
+        metric = d2l.Accumulator(4)
+        for i, (features, labels) in enumerate(train_iter):
+            timer.start()
+            l, acc = train_batch_ch13(
+                net, features, labels, loss, trainer, devices)
+            metric.add(l, acc, labels.shape[0], labels.numel())
+            timer.stop()
+            if (i + 1) % (num_batches // 5) == 0 or i == num_batches - 1:
+                animator.add(epoch + (i + 1) / num_batches,
+                             (metric[0] / metric[2], metric[1] / metric[3],
+                              None))
+        test_acc = d2l.evaluate_accuracy_gpu(net, test_iter)
+        animator.add(epoch + 1, (None, None, test_acc))
+    print(f'loss {metric[0] / metric[2]:.3f}, train acc '
+          f'{metric[1] / metric[3]:.3f}, test acc {test_acc:.3f}')
+    print(f'{metric[2] * num_epochs / timer.sum():.1f} examples/sec on '
+          f'{str(devices)}')
+```
+
+现在，我们可以[**定义 `train_with_data_aug` 函数，使用图像增广来训练模型**]。该函数获取所有的GPU，并使用Adam作为训练的优化算法，将图像增广应用于训练集，最后调用刚刚定义的用于训练和评估模型的 `train_ch13` 函数。
+
+```{.python .input}
+batch_size, devices, net = 256, d2l.try_all_gpus(), d2l.resnet18(10)
+net.initialize(init=init.Xavier(), ctx=devices)
+
+def train_with_data_aug(train_augs, test_augs, net, lr=0.001):
     train_iter = load_cifar10(True, train_augs, batch_size)
     test_iter = load_cifar10(False, test_augs, batch_size)
-    train(train_iter, test_iter, net, loss, trainer, ctx, num_epochs=15)
+    loss = gluon.loss.SoftmaxCrossEntropyLoss()
+    trainer = gluon.Trainer(net.collect_params(), 'adam',
+                            {'learning_rate': lr})
+    train_ch13(net, train_iter, test_iter, loss, trainer, 10, devices)
 ```
 
-我们先观察使用了图像增广的结果。
+```{.python .input}
+#@tab pytorch
+batch_size, devices, net = 256, d2l.try_all_gpus(), d2l.resnet18(10, 3)
 
-```{.python .input  n=39}
-train_with_data_aug(train_augs, test_augs)
+def init_weights(m):
+    if type(m) in [nn.Linear, nn.Conv2d]:
+        nn.init.xavier_uniform_(m.weight)
+
+net.apply(init_weights)
+
+def train_with_data_aug(train_augs, test_augs, net, lr=0.001):
+    train_iter = load_cifar10(True, train_augs, batch_size)
+    test_iter = load_cifar10(False, test_augs, batch_size)
+    loss = nn.CrossEntropyLoss(reduction="none")
+    trainer = torch.optim.Adam(net.parameters(), lr=lr)
+    train_ch13(net, train_iter, test_iter, loss, trainer, 10, devices)
 ```
 
-作为对比，下面我们尝试不使用图像增广。
+让我们使用基于随机左右翻转的图像增广来[**训练模型**]。
 
-```{.python .input  n=40}
-train_with_data_aug(test_augs, test_augs)
+```{.python .input}
+#@tab all
+train_with_data_aug(train_augs, test_augs, net)
 ```
-
-可以看到，即使添加了简单的随机翻转也会对训练产生一定的影响。图像增广通常会使训练准确率变低，但有可能提高测试准确率。
 
 ## 小结
 
-* 图像增广基于现有训练数据生成大量随机图像来有效避免过拟合。
+* 图像增广基于现有的训练数据生成随机图像，来提高模型的概化能力。
+* 为了在预测过程中得到确切的结果，我们通常对训练样本只进行图像增广，而在预测过程中不使用随机操作的图像增广。
+* 深度学习框架提供了许多不同的图像增广方法，这些方法可以被同时应用。
 
 ## 练习
 
-* 尝试在CIFAR-10训练中增加不同的增广方法。
+1. 在不使用图像增广的情况下训练模型： `train_with_data_aug(no_aug, no_aug)` 。比较使用和不使用图像增广的训练结果和测试精度。这个对比实验能支持图像增广可以减轻过度拟合的论点吗？为什么？
+2. 在基于 CIFAR-10 数据集的模型训练中结合多种不同的图像增广方法。它能提高测试准确性吗？
+3. 参阅深度学习框架的在线文档。它还提供了哪些其他的图像增广方法？
 
-## 扫码直达[讨论区](https://discuss.gluon.ai/t/topic/1666)
+:begin_tab:`mxnet`
+[Discussions](https://discuss.d2l.ai/t/2828)
+:end_tab:
 
-![](../img/qr_image-augmentation.svg)
+:begin_tab:`pytorch`
+[Discussions](https://discuss.d2l.ai/t/2829)
+:end_tab:

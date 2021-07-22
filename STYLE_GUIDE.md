@@ -15,17 +15,21 @@
     * 使用中文双引号
 * 符号描述
     * 时刻t（不是t时刻）
+	* 形状使用英文标点
+        * (10, 20) 不是 （10，20）
+* 空格：
+	* 文本中中文和英文、数字、数学公式、特殊字体等之间不要加空格
+	* 非行首的`:numref:`、`:cite:`等前留有一个英文空格（否则网页不渲染）
+	* 代码注释同上
 * 人称
     * 第一人称 → 我们
-    * 第二人称 → 你、大家
+    * 第二人称 → 读者、你、大家
 * 工具或部件
-    * Gluon, MXNet, NumPy, spaCy, NDArray, Symbol, Block, HybridBlock, ResNet-18, Fashion-MNIST
+    * Gluon, MXNet, NumPy, spaCy, ResNet-18, Fashion-MNIST, matplotlib
         * 这些都作为词，不要带重音符
-    * Dense类/实例, Sequential类/实例, HybridSequential类/实例
-        * 不要带重音符
     * `backward`函数
         * 不是“`backward()`函数” （不要带括号）
-    * for循环
+    * `for`循环
 * 术语
     * 统一使用
         * 函数（非方法）
@@ -74,14 +78,15 @@
         * 1pt
 		* arrow head size: 50%
     * 字体：
-        * 英文：Arial, 9pt（下标：7pt）
+        * 英文：STIXGeneral, 9pt（下标和上标：6pt）
         * 中文：PingFang SC, 9pt
+	* 下标和上标中的数字和括号不要斜体
     * 颜色：
         * 非填充深蓝色（与黑相近）：
             * 5B7DAA
         * 填充蓝色（与黑对比）
-            * 深：C9E2FF
-            * 淡：EFF6FD
+            * 深：66BFFF
+            * 淡：B2D9FF
 * 版权
     * 不使用网络图片
 * 位置
@@ -100,6 +105,8 @@
 * Python规范一致
     * PEP8
         * 二元操作符换行：操作符和后一元一起换行 (https://www.python.org/dev/peps/pep-0008/#should-a-line-break-before-or-after-a-binary-operator)
+* 将相邻赋值语句尽可能合并为同一行
+	* 如 num_epochs, lr = 5, 0.1
 * 变量名一致
     * num_epochs
         * 迭代周期
@@ -125,12 +132,12 @@
         * DataLoader实例：train_iter, test_iter, data_iter
 * 注释
     * 中文
-    * 中文和英文之间加空格
-    * 句末加句号
+    * 句末不加句号
 * 书本页宽限制
-    * 每行不超过79字符
+    * 每行不超过78字符
+        * In [X]: 79字符不会自动换行（X = 1, ..., 9）
+    	* In [XX]: 78字符不会自动换行（XX = 10, 11, ..., 99）
     * 打印结果自动换行
-* utils代码写进附录
 * imports
     * import alphabetically
     * from mxnet.gluon import data as gdata, loss as gloss, nn, utils as gutils
@@ -157,14 +164,15 @@
     * [层](http:bla)
     * 无需暴露URL
 
+## 英翻汉的常见问题
 
-## 二维码
+* 遇到不确定的地方，可以翻阅中文版第一版的处理方法（即我们需要遵照的出版标准），以及查阅人工翻译 http://www.jukuu.com/
+* 建立中英文术语对照表，全书术语翻译要完全一致。
+* 语法要正确（如不能缺主语、谓语）、句子要通顺（硬翻不妥就意译）、不要漏内容。
+* 代码注释要翻译。注意：i) 每行不要超过78字符，注释末尾不用加句号。 ii) # 后要空一个半角字符（英文空格）。iii) 如果注释与代码同行，# 前要空两个半角字符（英文空格）。iv）保留注释中的``符号（为了表示代码部分，如变量名、函数名等）。v）注释中中文和英文之间不要空格。vi）贪婪换行：只有当一行注释抵到78字符时再换行。
+* 不要新加空行（这样会另起一个自然段）。
+* 术语要保留英文翻译。现在很多地方漏了英文翻译。格式：*术语*（terminology）
+* 正文和代码注释均使用中文标点。例如，中文括号要用全角括号（），不是英文半角()。例外：所有表示形状的括号和逗号（逗号后紧跟半角英文空格）用英文半角，例如“(批量大小, 词数)”而不是“（批量大小，词数）”
+* 英文在标题里或句首全部不要首字母大写（即便在标题的第一个词）。除非本身是首字母大写的术语
+* 不要客气。“您”->“你”，去掉“请”
 
-* https://www.the-qrcode-generator.com/
-    * 75pixel, SVG
-
-## 文献引用
-
-* 每节末尾附上本节参考文献
-    * 学术性引用
-    * Google Scholar: APA格式
